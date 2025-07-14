@@ -530,7 +530,7 @@ void* read_midi_from_serial_port(void* seq)
 /* --------------------------------------------------------------------- */
 // Main program
 
-main(int argc, char** argv)
+int main(int argc, char** argv)
 {
 	//arguments arguments;
 	struct termios oldtio, newtio;
@@ -642,5 +642,7 @@ main(int argc, char** argv)
 	/* restore the old port settings */
 	tcsetattr(serial, TCSANOW, &oldtio);
 	printf("\ndone!\n");
+
+	return 0;
 }
 

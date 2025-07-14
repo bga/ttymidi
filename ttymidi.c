@@ -391,6 +391,13 @@ void write_midi_to_alsa(snd_seq_t* seq, int port_out_id, char *buf, int buflen)
 	param1    = buf[1];
 	param2    = buf[2];
 
+	if(operation < 0x80) {
+		channel = 0;
+		param1 = buf[0];
+		param2 = buf[1];
+		operation = ((0 < param2) ? 0x90 : 0x80);
+	};
+
 	switch (operation)
 	{
 		case 0x80:
@@ -465,6 +472,7 @@ void write_midi_to_alsa(snd_seq_t* seq, int port_out_id, char *buf, int buflen)
 #define BUF_SIZE 1024 // Size of the serial midi buffer - determines the maximum size of sysex messages
 
 int get_bytes_expected(int midicommand) {
+	 midicommand &= 0xFF;
    switch (midicommand & 0xf0) {
       case 0x80: return 2; // note off
       case 0x90: return 2; // note on
@@ -474,8 +482,9 @@ int get_bytes_expected(int midicommand) {
       case 0xd0: return 1; // channel pressure
       case 0xe0: return 1; // pitch bend
       case 0xf0: 
+		if (midicommand == 0xFE) return 0; //# Dont know
 		if (midicommand == 0xF0) return BUF_SIZE - 1; // Sysex
-		else return 0; // Other controller
+		default: return 2 - 1; //# note on repeat
    }
    return 0;
 }
@@ -483,7 +492,7 @@ int get_bytes_expected(int midicommand) {
 void* read_midi_from_serial_port(void* seq)
 {
 	char buf[BUF_SIZE], readbyte, msg[MAX_MSG_SIZE];
-	int buflen, bytesleft = BUF_SIZE - 1;
+	int buflen, bytesleft = 0;
 
 	/* Lets first fast forward to first status byte... */
 	
@@ -508,6 +517,13 @@ void* read_midi_from_serial_port(void* seq)
 			fflush(stdout);
 			continue;
 		}
+
+		if(bytesleft == 0) {
+		  read(serial, &readbyte, 1);
+			buflen = 0; // Start of a new message
+			buf[buflen++] = readbyte; // Store byte in the buffer
+			bytesleft = get_bytes_expected(readbyte); // Determine the length of the message
+		};
 		
 		// Read a full midi message
 		while (bytesleft > 0) {
@@ -524,10 +540,10 @@ void* read_midi_from_serial_port(void* seq)
 		  }
 		}
 		
-		bytesleft = BUF_SIZE - 1; 
+		bytesleft = 0;
 		
 		// Write it to alsa if the buffer contains a valid message
-		if (buf[0] & 0x80) write_midi_to_alsa(seq, port_out_id, buf, buflen);
+		write_midi_to_alsa(seq, port_out_id, buf, buflen);
 				
 	}
 }

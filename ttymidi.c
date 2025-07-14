@@ -49,6 +49,9 @@
 #include <linux/ioctl.h>
 #include <asm/ioctls.h>
 
+
+#include "tty-utils.h"
+
 #define FALSE                         0
 #define TRUE                          1
 
@@ -61,6 +64,10 @@
 int run;
 int serial;
 int port_out_id;
+
+int baudrate_alt = 0;
+
+
 
 /* --------------------------------------------------------------------- */
 // Program options
@@ -132,7 +139,7 @@ static error_t parse_opt (int key, char *arg, struct argp_state *state)
 					case 38400  : arguments->baudrate = B38400 ; break;
 					case 57600  : arguments->baudrate = B57600 ; break;
 					case 115200 : arguments->baudrate = B115200; break;
-					default: printf("Baud rate %i is not supported.\n",baud_temp); exit(1);
+					default: arguments->baudrate = 0; baudrate_alt = baud_temp; break;
 				}
 
 		case ARGP_KEY_ARG:
@@ -574,7 +581,7 @@ int main(int argc, char** argv)
 	 * CLOCAL   : local connection, no modem contol
 	 * CREAD    : enable receiving characters
 	 */
-	newtio.c_cflag = arguments.baudrate | CS8 | CLOCAL | CREAD; // CRTSCTS removed
+	newtio.c_cflag = (arguments.baudrate != 0 ?  arguments.baudrate : B38400) | CS8 | CLOCAL | CREAD; // CRTSCTS removed
 
 	/*
 	 * IGNPAR  : ignore bytes with parity errors
@@ -604,6 +611,15 @@ int main(int argc, char** argv)
 	 */
 	tcflush(serial, TCIFLUSH);
 	tcsetattr(serial, TCSANOW, &newtio);
+
+	if(arguments.baudrate == 0) {
+	int TTY_setBaudRate(int serialFd, int baudrate);
+		if(!TTY_setCustomBaudRate(serial, baudrate_alt)) {
+			fprintf(stderr, "Failed to set baudrate %i for `%s`.\n", baudrate_alt, arguments.serialdevice);
+			return 1;
+		};
+	};
+
 
 	// Linux-specific: enable low latency mode (FTDI "nagling off")
 //	ioctl(serial, TIOCGSERIAL, &ser_info);
